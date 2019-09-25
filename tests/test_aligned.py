@@ -114,7 +114,7 @@ class TestAligned:
         assert Path("sample.bam").exists()
         assert Path("sample.bam.bai").exists()
 
-    def test_substraction_by_read(self):
+    def test_subtraction_by_read(self):
         from mbf_sampledata import get_human_22_fake_genome
 
         genome = get_human_22_fake_genome()
@@ -130,7 +130,7 @@ class TestAligned:
             get_sample_data(Path("mbf_align/rnaseq_spliced_chr22.bam")),
             genome,
             False,
-            "AA123",
+            "AA124",
         )  # index creation is automatic
         lane3 = mbf_align.AlignedSample(
             "test_lane3",
@@ -139,15 +139,40 @@ class TestAligned:
             False,
             "AA123",
         )  # index creation is automatic
+        lane3_subset = mbf_align.AlignedSample(
+            "test_lane3_subset",
+            get_sample_data(Path("mbf_align/chipseq_chr22_subset.bam")),
+            genome,
+            False,
+            "AA123",
+        )  # index creation is automatic
 
-        lane_empty = lane.substract("empty", lane2)
-        lane_full = lane.substract("full", lane3)
+        lane_empty = lane.post_process(
+            mbf_align.post_process.SubtractOtherLane(lane2), new_name="empty"
+        )
+        lane_full = lane.post_process(
+            mbf_align.post_process.SubtractOtherLane(lane3), new_name="full"
+        )
+        lane_some = lane3.post_process(
+            mbf_align.post_process.SubtractOtherLane(lane3_subset),
+            result_dir="results/aligned/shu",
+        )
+        qc_jobs = [lane_some.post_processor_qc_jobs, lane_full.post_processor_qc_jobs]
+        prune_qc(lambda job: job in qc_jobs)
         ppg.run_pipegraph()
         assert Path(lane_empty.get_bam_names()[1]).exists()
         assert Path(lane_full.get_bam_names()[1]).exists()
         assert lane_empty.mapped_reads() == 0
         assert lane_full.mapped_reads() == lane.mapped_reads()
         assert lane.mapped_reads() != 0
+        assert (
+            lane_some.mapped_reads()
+            == lane3.mapped_reads() - lane3_subset.mapped_reads()
+        )
+        assert lane3_subset.mapped_reads()  # make sure there was something to subtract
+        assert "shu" in lane_some.get_bam_names()[0]
+        assert_image_equal(qc_jobs[0].filenames[0], '_result_dir')
+        assert_image_equal(qc_jobs[0].filenames[0])
 
 
 @pytest.mark.usefixtures("new_pipegraph")

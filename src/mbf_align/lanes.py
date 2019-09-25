@@ -154,33 +154,44 @@ class AlignedSample:
         """How many unmapped entrys are in the bam?"""
         return self._parse_idxstat()[1]
 
-    def substract(self, new_name, other_alignment):
-        """Filter all reads present (by name) in other_alignment from this one.
-        Probably only useful for single end data.
+    def post_process(self, post_processor, new_name=None, result_dir=None):
+        """Postprocess this lane using a  mbf_align.postprocess.*
+        Ie. Turn a lane into a 'converted' lane.
+
         """
-        result_dir = self.result_dir / ".." / new_name
+        if new_name is None:
+            new_name = self.name + '_' + post_processor.name
+        if result_dir is None:
+            result_dir = (
+                self.result_dir / ".." / post_processor.result_folder_name / self.result_dir.name
+            )
+        result_dir = Path(result_dir)
+        result_dir.mkdir(exist_ok=True, parents=True)
         bam_filename = result_dir / (new_name + ".bam")
 
-        def substract():
-            import mbf_bam
+        def inner(output_filename):
+            post_processor.process(Path(self.get_bam_names()[0]), Path(output_filename), result_dir)
 
-            mbf_bam.substract_bam(
-                str(bam_filename),
-                str(self.get_bam_names()[0]),
-                str(other_alignment.get_bam_names()[0]),
-            )
-
-        alignment_job = ppg.FileGeneratingJob(bam_filename, substract).depends_on(
-            other_alignment.load(), self.load()
+        alignment_job = ppg.FileGeneratingJob(bam_filename, inner).depends_on(
+            self.load(),
+            post_processor.get_dependencies(),
+            ppg.ParameterInvariant(bam_filename, post_processor.get_parameters()),
         )
-        return AlignedSample(
+        vid = post_processor.get_vid(self.vid)
+
+        new_lane = AlignedSample(
             new_name,
             alignment_job,
             self.genome,
             self.is_paired,
-            [self.vid, "-", other_alignment.vid],
+            vid,
             result_dir=result_dir,
         )
+
+        new_lane.post_processor_jobs = post_processor.further_jobs(new_lane, self)
+        new_lane.parent = self
+        new_lane.post_processor_qc_jobs = post_processor.register_qc(new_lane)
+        return new_lane
 
     def get_alignment_stats(self):
         if self.aligner is not None and hasattr(self.aligner, "get_alignment_stats"):
@@ -217,6 +228,8 @@ class AlignedSample:
             )
 
         def plot(df):
+            import numpy as np
+
             unique_count = df["Count"].sum()
             total_count = (df["Count"] * df["Repetition count"]).sum()
             pcb = float(unique_count) / total_count
@@ -238,7 +251,11 @@ class AlignedSample:
                 .theme_bw()
                 .add_point("Repetition count", "Count")
                 .add_line("Repetition count", "Count")
-                .scale_y_continuous(trans="log2")
+                .scale_y_continuous(
+                    trans="log2",
+                    breaks=[2 ** x for x in range(1, 24)],
+                    labels=lambda x: ["2^%0.f" % np.log(xs) for xs in x],
+                )
                 .title(title)
                 .pd
             )
@@ -272,7 +289,7 @@ class AlignedSample:
                         coll[g.chr].append(
                             (start, stop, 0b0101 if g.strand == 1 else 0b0110)
                         )
-                    for start, stop in zip(*g.introns):
+                    for start, stop in zip(*g.introns_strict):
                         coll[g.chr].append(
                             (start, stop, 0b1001 if g.strand == 1 else 0b1010)
                         )
@@ -382,6 +399,7 @@ class AlignedSample:
                 )
                 .p9()
                 .add_bar("sample", "count", fill="what", position="dodge")
+                .scale_y_continuous(labels=lambda xs: ["%.2g" % x for x in xs])
                 .turn_x_axis_labels()
                 .pd
             )
@@ -412,6 +430,7 @@ class AlignedSample:
                 .theme_bw()
                 .annotation_stripes()
                 .add_bar("biotype", "read count", stat="identity")
+                .scale_y_continuous(labels=lambda xs: ["%.2g" % x for x in xs])
                 # .turn_x_axis_labels()
                 .coord_flip()
                 .title(self.name)
@@ -445,6 +464,7 @@ class AlignedSample:
                     )
                 )
             df = pd.concat(parts)
+            print(df)
             return (
                 dp(df)
                 .p9()
@@ -528,6 +548,9 @@ class AlignedSample:
         def plot(df):
             import natsort
 
+            df[
+                "count"
+            ] += 1  # so we don't crash in the log scale if all values are 0 for a chr
             return (
                 dp(df)
                 .categorize("chr", natsort.natsorted(X["chr"].unique()))
@@ -564,7 +587,7 @@ class AlignedSample:
                 chr: set() for chr in self.genome.get_chromosome_lengths()
             }
             for gene in self.genome.genes.values():
-                for start, stop in zip(*gene.introns):
+                for start, stop in zip(*gene.introns_all):
                     known_splice_sites_by_chr[gene.chr].add((start, stop))
             total_counts = collections.Counter()
             known_count = 0
@@ -601,6 +624,7 @@ class AlignedSample:
                 .theme_bw()
                 .add_bar("x", "count", stat="identity")
                 .facet_wrap("side", scales="free", ncol=1)
+                .scale_y_continuous(labels=lambda xs: ["%.2g" % x for x in xs])
                 .title(self.name)
                 .theme(panel_spacing_y=0.2)
                 .render(output_filename)
