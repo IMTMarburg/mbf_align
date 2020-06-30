@@ -379,9 +379,9 @@ def _urls_for_gsm(gsm):
     url = "http://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=%s" % gsm
     req = requests.get(url, timeout=10)
     page = req.text.strip()
-    SRX = re.findall(r">(SRX\d+)<", page)
+    SRX = re.findall(r">\s*(SRX\d+)\s*<", page)
     if not SRX:
-        raise ValueError("Could not find SRX number")
+        raise ValueError("Could not find SRX number for gsm '%s'" % gsm)
     if len(set(SRX)) > 1:
         raise ValueError("Found multiple SRX: %s" % SRX)
     SRX = SRX[0]
