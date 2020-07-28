@@ -192,11 +192,12 @@ class FASTQsFromJob(_FASTQsBase):
 
 
 class FASTQsFromURLs(_FASTQsBase):
-    def __init__(self, urls):
+    def __init__(self, urls, job_class):
         if isinstance(urls, str):
             urls = [urls]
         self.urls = sorted(urls)
         self.target_files = self.name_files()
+        self.job_class = job_class
         self.jobs = self.download_files()
         self.dependencies = self.jobs + [
             ppg.ParameterInvariant(
@@ -242,7 +243,7 @@ class FASTQsFromURLs(_FASTQsBase):
                     download_file(url, op)
                 shutil.move(str(target_fn) + "_temp", target_fn)
 
-            job = ppg.MultiFileGeneratingJob(
+            job = self.job_class(
                 [target_fn, target_fn.with_name(target_fn.name + ".url")], download
             )
             result.append(job)
@@ -250,7 +251,7 @@ class FASTQsFromURLs(_FASTQsBase):
 
 
 class _FASTQsFromSRA(_FASTQsBase):
-    def __init__(self, accession):
+    def __init__(self, accession, job_class):
         if accession.endswith(":P"):
             self.paired = True
         elif accession.endswith(":S"):
@@ -259,6 +260,7 @@ class _FASTQsFromSRA(_FASTQsBase):
             raise ValueError(
                 "Append :P or :S to accession for paired/single end download"
             )
+        self.job_class = job_class
         self.accession = accession[:-2]
         self.target_dir = Path("incoming") / "automatic" / accession
         self.target_dir.mkdir(exist_ok=True, parents=True)
@@ -303,26 +305,26 @@ class _FASTQsFromSRA(_FASTQsBase):
                 raise ValueError("fasterq-dump", p.returncode)
             (self.target_dir / "sentinel").write_text("done")
 
-        return ppg.FileGeneratingJob(self.target_dir / "sentinel", dump)
+        return selfjob_class([self.target_dir / "sentinel"], dump)
 
 
-def FASTQsFromAccession(accession):  # pragma: no cover - for now
+def FASTQsFromAccession(accession, job_class=ppg.MultiFileGeneratingJob):  # pragma: no cover - for now
     if accession.startswith("GSM"):
-        return _FASTQs_from_url_callback(accession, _urls_for_gsm)
+        return _FASTQs_from_url_callback(accession, _urls_for_gsm, job_class)
     # elif accession.startswith("GSE"):#  multilpe
     # raise NotImplementedError()
     elif accession.startswith("SRR"):
-        return _FASTQsFromSRA(accession)
+        return _FASTQsFromSRA(accession, job_class)
     # elif accession.startswith("E-MTAB"): # multiple!
     # raise NotImplementedError()
     elif accession.startswith("PRJNA"):
-        return _FASTQs_from_url_callback(accession, _urls_for_err)
+        return _FASTQs_from_url_callback(accession, _urls_for_err, job_class)
     elif accession.startswith("DRX"):
         raise NotImplementedError()
     elif accession.startswith("ERR"):
-        return _FASTQs_from_url_callback(accession, _urls_for_err)
+        return _FASTQs_from_url_callback(accession, _urls_for_err, job_class)
     elif accession.startswith("E-MTAB") and ":" in accession:
-        return _FASTQs_from_url_callback(accession, _urls_for_emtab)
+        return _FASTQs_from_url_callback(accession, _urls_for_emtab, job_class)
     else:
         raise ValueError("Could not handle this accession %s" % accession)
 
@@ -363,14 +365,14 @@ def _urls_for_emtab(accession):
     return urls
 
 
-def _FASTQs_from_url_callback(accession, url_callback):
+def _FASTQs_from_url_callback(accession, url_callback, job_class):
     cache_folder = Path("cache/url_lookup")
     cache_folder.mkdir(exist_ok=True, parents=True)
     cache_file = cache_folder / (accession + ".urls")
     if not cache_file.exists():  # pragma: no branch
         cache_file.write_text("\n".join(url_callback(accession)))
     urls = cache_file.read_text().split("\n")
-    return FASTQsFromURLs(urls)
+    return FASTQsFromURLs(urls, job_class)
 
 
 def _urls_for_gsm(gsm):
@@ -381,7 +383,15 @@ def _urls_for_gsm(gsm):
     page = req.text.strip()
     SRX = re.findall(r">\s*(SRX\d+)\s*<", page)
     if not SRX:
-        raise ValueError("Could not find SRX number for gsm '%s'" % gsm)
+        if '>Reanalysis of<' in page:
+            reanalysis = page[page.find('>Reanalysis of<'):]
+            reanalysis = reanalysis[:reanalysis.find("</a>")]
+            old_gsm = re.findall(r">\s*(GSM\d+)\s*$", reanalysis)
+            if not old_gsm:
+                raise ValueError("Could not find SRX, and parsing for reanalysis failed")
+            return _urls_for_gsm(old_gsm[0])
+        else:
+            raise ValueError("Could not find SRX number for gsm '%s'" % gsm)
     if len(set(SRX)) > 1:
         raise ValueError("Found multiple SRX: %s" % SRX)
     SRX = SRX[0]
