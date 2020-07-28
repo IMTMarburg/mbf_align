@@ -17,7 +17,7 @@ def build_fastq_strategy(input_strategy):
             str/Path - file: treat as single fastq(.gz) file
             str/Path - folder: treat as folder
             pypipegraph job: extract filenames
-            list - recurvively apply build_fastq_strategy
+            list - recurvively apply build_fastq_strategy and FASTQsJoin them
         """
 
     if isinstance(input_strategy, _FASTQsBase):
@@ -31,13 +31,10 @@ def build_fastq_strategy(input_strategy):
     elif isinstance(input_strategy, ppg.FileGeneratingJob):
         input_strategy = FASTQsFromJob(input_strategy)
     elif isinstance(input_strategy, Iterable):
-        for x in input_strategy:
-            if not (isinstance(x, str) or isinstance(x, Path)):  # pragma: no cover
-                raise ValueError(
-                    "if your input strategy is an iterable, entries must be str/Path"
-                )
-        input_strategy = FASTQsFromFiles([Path(p) for p in input_strategy])
-
+        if all((isinstance(x, (str, Path)) for x in input_strategy)):
+            input_strategy = FASTQsFromFiles(input_strategy)
+        else:
+            input_strategy = FASTQsJoin([build_fastq_strategy(p) for p in input_strategy])
     else:
         raise ValueError(f"Could not parse input_strategy: {repr(input_strategy)}")
     return input_strategy
@@ -90,7 +87,7 @@ class FASTQsJoin(_FASTQsBase):
         res = []
         for s in self.strategies:
             res.extend(s())
-        return res
+        return self.res
 
 
 class FASTQsFromFile(_FASTQsBase):
@@ -283,7 +280,6 @@ class _FASTQsFromSRA(_FASTQsBase):
     def fastq_dump(self):
         def dump():
             import subprocess
-            import os
 
             cmd = [
                 self.algo.path / "bin/" "fasterq-dump",
@@ -301,7 +297,7 @@ class _FASTQsFromSRA(_FASTQsBase):
             stdout, stderr = p.communicate()
             (self.target_dir / "stdout").write_bytes(stdout)
             (self.target_dir / "stderr").write_bytes(stderr)
-            if p.returncode != 0 or b'invalid accession' in stderr:
+            if p.returncode != 0 or b"invalid accession" in stderr:
                 raise ValueError("fasterq-dump", p.returncode)
             (self.target_dir / "sentinel").write_text("done")
 

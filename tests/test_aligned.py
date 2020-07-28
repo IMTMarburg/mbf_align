@@ -174,6 +174,57 @@ class TestAligned:
         assert_image_equal(qc_jobs[0].filenames[0], "_result_dir")
         assert_image_equal(qc_jobs[0].filenames[0])
 
+    def test_to_fastq(self):
+        bam_path = get_sample_data(Path("mbf_align/ex2.bam"))
+        bam_job = ppg.FileInvariant(bam_path)
+        genome = object()
+        lane = mbf_align.AlignedSample("test_lane", bam_job, genome, False, "AA123")
+        fastq_path = "out.fastq"
+        lane.to_fastq(fastq_path)
+        ppg.run_pipegraph()
+        assert Path(fastq_path).exists()
+        assert (
+            Path(fastq_path).read_text()
+            == """@read_28833_29006_6945
+AGCTTAGCTAGCTACCTATATCTTGGTCTTGGCCG
++
+<<<<<<<<<<<<<<<<<<<<<:<9/,&,22;;<<<
+@read_28701_28881_323b
+TGCAAGGCCGCATCGGCCAAGGCCAAGATATAGGT
++
+<<<<7<<<<<<<<<<<<;6<<<:;7<<<<;<<<<<
+@read_28701_28881_323c
+TGCAAGGCCGCATCGGCCAAGGCCAAGATATAGGT
++
+<<<<7<<<<<<<<<<<<;6<<<:;7<<<<;<<<<<
+@read_28701_28881_324a
+TGCAAGGCCGCATCGGCCAAGGCCAAGATATAGGT
++
+<<<<7<<<<<<<<<<<<;6<<<:;7<<<<;<<<<<
+@read_28701_28881_324b
+TGCAAGGCCGCATCGGCCAAGGCCAAGATATAGGT
++
+<<<<7<<<<<<<<<<<<;6<<<:;7<<<<;<<<<<
+@read_28701_28881_324c
+TGCAAGGCCGCATCGGCCAAGGCCAAGATATAGGT
++
+<<<<7<<<<<<<<<<<<;6<<<:;7<<<<;<<<<<
+@test_clipped1
+AGCTTAGCTAGCTACCTATATCTTGGTCTTGGCCG
++
+<<<<<<<<<<<<<<<<<<<<<:<9/,&,22;;<<<
+@test_clipped1
+AGCTTAGCTAGCTACCTATATCTTGGTCTTGGCCG
++
+<<<<<<<<<<<<<<<<<<<<<:<9/,&,22;;<<<
+"""
+        )
+        lane2 = mbf_align.AlignedSample("test_lane2", bam_job, genome, is_paired=True, vid="AA123")
+        with pytest.raises(ValueError):
+            lane2.to_fastq(
+                "nope.fastq"
+            )  # no support for paired end data at this point
+
 
 @pytest.mark.usefixtures("new_pipegraph")
 class TestQualityControl:
@@ -198,13 +249,11 @@ class TestQualityControl:
         not_pruned_count = sum([1 for x in get_qc_jobs() if not x._pruned])
         assert not_pruned_count == remaining_job_count  # plot cache, plot_table, plot
         ppg.run_pipegraph()
-        if chdir == '..':
+        if chdir == "..":
             fn = lane.result_dir / chdir / filename
         else:
             fn = lane.result_dir / chdir / f"{lane.name}_{filename}"
-        assert_image_equal(
-            fn, suffix="_" + filename
-        )
+        assert_image_equal(fn, suffix="_" + filename)
 
     def test_qc_complexity(self):
         self._test_qc_plots("complexity.png", 3)
