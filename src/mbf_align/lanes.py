@@ -118,9 +118,12 @@ class AlignedSample(_BamDerived):
 
         self.name = name
         ppg.util.assert_uniqueness_of_object(self)
-        self.alignment_job, self.index_job, bam_name, index_fn = self._parse_alignment_job_input(
-            alignment_job
-        )
+        (
+            self.alignment_job,
+            self.index_job,
+            bam_name,
+            index_fn,
+        ) = self._parse_alignment_job_input(alignment_job)
         self.result_dir = (
             Path(result_dir)
             if result_dir
@@ -199,6 +202,24 @@ class AlignedSample(_BamDerived):
         new_lane.parent = self
         new_lane.post_processor_qc_jobs = post_processor.register_qc(new_lane)
         return new_lane
+
+    def to_fastq(self, output_filename, as_temp_file=False):
+        """Convert a (single end) bam back into a fastq"""
+        if self.is_paired:
+            raise ValueError(
+                "No support for -> fastq for paired end files at the the moment"
+            )
+
+        def convert():
+            import mbf_bam
+
+            mbf_bam.bam_to_fastq(output_filename, self.get_bam_names()[0])
+
+        if as_temp_file:
+            cls = ppg.TempFileGeneratingJob
+        else:
+            cls = ppg.FileGeneratingJob
+        return cls(output_filename, convert).depends_on(self.load())
 
     def get_alignment_stats(self):
         if self.aligner is not None and hasattr(self.aligner, "get_alignment_stats"):
@@ -335,14 +356,12 @@ class AlignedSample(_BamDerived):
                             elif down & 0b0100 == 0b0100:
                                 tag = "exon"
                             else:  # pragma: no cover  haven't observed this case in the wild yet.
-                                tag = (  # pragma: no cover
-                                    "intron"  # pragma: no cover
-                                )  # pragma: no cover  haven't observed this case in the wild yet.
+                                tag = "intron"  # pragma: no cover  # pragma: no cover  # pragma: no cover  haven't observed this case in the wild yet.
                             if down & 0b11 == 0b11:
                                 tag += "_undecidable"
                                 strand = (
-                                    1
-                                )  # doesn't matter, but must be one or the other
+                                    1  # doesn't matter, but must be one or the other
+                                )
                             elif down & 0b01:
                                 strand = 1
                             else:
@@ -455,18 +474,18 @@ class AlignedSample(_BamDerived):
         )
 
     def register_qc_alignment_stats(self):
-        output_filename = self.result_dir / ".." / f"alignment_statistics.png"
+        output_filename = self.result_dir / ".." / "alignment_statistics.png"
 
         def calc_and_plot(output_filename, lanes):
             parts = []
-            for l in lanes:
-                p = l.get_alignment_stats()
+            for lane in lanes:
+                p = lane.get_alignment_stats()
                 parts.append(
                     pd.DataFrame(
                         {
                             "what": list(p.keys()),
                             "count": list(p.values()),
-                            "sample": l.name,
+                            "sample": lane.name,
                         }
                     )
                 )

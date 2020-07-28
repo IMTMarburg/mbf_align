@@ -95,16 +95,16 @@ class SubtractOtherLane(_PostProcessor):
 
         def calc_and_plot(output_filename, lanes):
             parts = []
-            for l in lanes:
-                was = l.parent.mapped_reads()
-                now = l.mapped_reads()
+            for lane in lanes:
+                was = lane.parent.mapped_reads()
+                now = lane.mapped_reads()
                 lost = was - now
                 parts.append(
                     pd.DataFrame(
                         {
                             "what": ["kept", "lost"],
                             "count": [now, lost],
-                            "sample": l.name,
+                            "sample": lane.name,
                         }
                     )
                 )

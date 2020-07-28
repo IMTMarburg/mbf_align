@@ -31,8 +31,10 @@ def build_fastq_strategy(input_strategy):
     elif isinstance(input_strategy, ppg.FileGeneratingJob):
         input_strategy = FASTQsFromJob(input_strategy)
     elif isinstance(input_strategy, Iterable):
-        input_strategy = FASTQsJoin([build_fastq_strategy(p) for p in input_strategy])
-
+        if all((isinstance(x, (str, Path)) for x in input_strategy)):
+            input_strategy = FASTQsFromFiles(input_strategy)
+        else:
+            input_strategy = FASTQsJoin([build_fastq_strategy(p) for p in input_strategy])
     else:
         raise ValueError(f"Could not parse input_strategy: {repr(input_strategy)}")
     return input_strategy
@@ -85,7 +87,7 @@ class FASTQsJoin(_FASTQsBase):
         res = []
         for s in self.strategies:
             res.extend(s())
-        return res
+        return self.res
 
 
 class FASTQsFromFile(_FASTQsBase):
@@ -276,7 +278,6 @@ class _FASTQsFromSRA(_FASTQsBase):
     def fastq_dump(self):
         def dump():
             import subprocess
-            import os
 
             cmd = [
                 self.algo.path / "bin/" "fasterq-dump",
