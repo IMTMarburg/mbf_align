@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import shutil
 import requests
 import hashlib
@@ -404,7 +405,12 @@ def _urls_for_gsm(gsm):
         )
         # we could use the http server - but in my experience the ftp server
         # transfers files about 100x faster (20 MB/s vs 200k/s...)
-        ftp_url = "ftp" + listing_url[4:]
+        if 'ftp_proxy' in os.environ:
+            #but if there is an ftp_proxy, our download code can't make use of it.
+            #and we fall back to http
+            ftp_url = "http" + listing_url[4:]
+        else:
+            ftp_url = "ftp" + listing_url[4:]
         req = requests.get(listing_url, timeout=10)
         for filename in re.findall(r'href="([^"]+\.fastq.gz)"', req.text):
             if filename:
