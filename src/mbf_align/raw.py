@@ -27,8 +27,9 @@ class Sample:
                 whether to reverse the reads before processing
             fastq_processor: fastq2.*
                 Preprocessing strategy
-            pairing: 'single', 'paired', 'only_first', 'only_second', 'paired_as_first'
-                default: 'single'
+            pairing: 'auto', 'single', 'paired', 'only_first', 'only_second', 'paired_as_first'
+                default: 'auto'
+                'auto' -> discover pairing from presence of R1/R2 files (-> 'single' or 'paired')
                 'single' -> single end sequencing
                 'paired -> 'paired end' sequencing
                 'only_first -> 'paired end' sequencing, but take only R1 reads
@@ -45,6 +46,7 @@ class Sample:
         self.fastq_processor = fastq_processor
         self.vid = vid
         accepted_pairing_values = (
+            'auto',
             "single",
             "paired",
             "only_first",
@@ -55,6 +57,11 @@ class Sample:
             raise ValueError(
                 f"pairing was not in accepted values: {accepted_pairing_values}"
             )
+        if pairing == 'auto':
+            if self.input_strategy.is_paired:
+                pairing = 'paired'
+            else:
+                pairing = 'single'
         self.pairing = pairing
         self.is_paired = self.pairing == "paired"
         self.cache_dir = (

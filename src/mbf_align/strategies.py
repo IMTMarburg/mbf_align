@@ -77,6 +77,13 @@ class _FASTQsBase:
         else:
             return self._combine_r1_r2(forward, reverse)
 
+    @property
+    def is_paired(self):
+        fastqs = self()
+        print('basing pairing on', fastqs)
+        print('was paired', len(fastqs[0]) > 1)
+        return len(fastqs[0]) > 1
+
 
 class FASTQsJoin(_FASTQsBase):
     """join files from multiple strategies"""
@@ -368,7 +375,7 @@ def _FASTQs_from_url_callback(accession, url_callback, job_class):
     cache_file = cache_folder / (accession + ".urls")
     if not cache_file.exists():  # pragma: no branch
         cache_file.write_text("\n".join(url_callback(accession)))
-    urls = cache_file.read_text().split("\n")
+    urls = list(set(cache_file.read_text().split("\n")))
     return FASTQsFromURLs(urls, job_class)
 
 
