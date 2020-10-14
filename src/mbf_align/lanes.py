@@ -66,7 +66,7 @@ class _BamDerived:
                 index_job = ppg.FileInvariant(index_fn)
             else:
                 cache_dir = Path(ppg.util.global_pipegraph.cache_folder) / "bam_indices"
-                cache_dir.mkdir(exist_ok=True)
+                cache_dir.mkdir(exist_ok=True, parents=True)
                 index_fn = cache_dir / (self.name + "_" + Path(bam_name).name + ".bai")
                 index_job = ppg.FileGeneratingJob(
                     index_fn, self._index(bam_name, index_fn)
