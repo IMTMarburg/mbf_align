@@ -52,3 +52,5 @@ result_images
 *.coverage*
 tests/run/*
 pip-wheel-metadata/
+src/mbf_align/_common.c
+src/mbf_align/fastq2.c
