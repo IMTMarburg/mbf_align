@@ -137,7 +137,7 @@ class _BamDerived:
         return hash(self.__class__.__name__ + self.name)
 
     def load(self):
-        return self.alignment_job, self.index_job
+        return self.alignment_job, self.index_job, self.genome.download_genome
 
     def get_bam(self):
         import multiprocessing
