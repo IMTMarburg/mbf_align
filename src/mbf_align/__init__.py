@@ -8,4 +8,4 @@ from .strategies import *  # noqa:F403,F401
 __all__ = ["Sample", "fastq2", "PairingError", "AlignedSample", "post_process"]
 __all__.extend([x for x in dir(strategies) if x.startswith("FASTQs")])
 
-__version__ = "0.2"
+__version__ = '0.3'
