@@ -52,7 +52,7 @@ class _ChromosomeMangledSamFile(pysam.Samfile):
                     "Chromosome mangler for %s returned a region not in the file"
                     % (self,)
                 )
-        return pysam.Samfile.parseRegion(
+        return pysam.Samfile.parse_region(
             self,
             contig=contig,
             start=start,
