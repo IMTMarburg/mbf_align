@@ -9,6 +9,19 @@ from mbf_sampledata import get_sample_data, get_sample_path
 from mbf_qualitycontrol import prune_qc, get_qc_jobs
 
 
+class DummyGenome:
+    name = "Dummy_genome"
+
+    def job_genes(self):
+        return None
+
+    def job_transcripts(self):
+        return None
+
+    def download_genome(self):
+        return []
+
+
 @pytest.mark.usefixtures("new_pipegraph_no_qc")
 class TestAligned:
     def test_from_existing_bam(self):
@@ -219,11 +232,11 @@ AGCTTAGCTAGCTACCTATATCTTGGTCTTGGCCG
 <<<<<<<<<<<<<<<<<<<<<:<9/,&,22;;<<<
 """
         )
-        lane2 = mbf_align.AlignedSample("test_lane2", bam_job, genome, is_paired=True, vid="AA123")
+        lane2 = mbf_align.AlignedSample(
+            "test_lane2", bam_job, genome, is_paired=True, vid="AA123"
+        )
         with pytest.raises(ValueError):
-            lane2.to_fastq(
-                "nope.fastq"
-            )  # no support for paired end data at this point
+            lane2.to_fastq("nope.fastq")  # no support for paired end data at this point
 
 
 @pytest.mark.usefixtures("new_pipegraph")
@@ -341,3 +354,24 @@ class TestQualityControl:
         assert counts["get_bam"] == 2
         assert lane.get_alignment_stats() == {"Hello": 23}
         assert counts["get_bam"] == 2
+
+    def test_chromosome_mapping(self):
+        bam_path = get_sample_data(Path("mbf_align/ex2.bam"))
+        bam_job = ppg.FileInvariant(bam_path)
+        genome = DummyGenome()
+        lane = mbf_align.AlignedSample("test_lane", bam_job, genome, False, "AA123")
+        assert lane.name == "test_lane"
+        assert lane.load()[0] is bam_job
+        assert isinstance(lane.load()[1], ppg.FileInvariant)
+        assert lane.genome is genome
+        assert not lane.is_paired
+        assert lane.vid == "AA123"
+
+        with pytest.raises(ValueError):
+            mbf_align.AlignedSample("test_lane", bam_job, genome, False, "AA123")
+        lane2 = mbf_align.AlignedSample("test_lane2", bam_job, genome, True, "AA123")
+        assert lane2.is_paired
+
+        b = lane.get_bam()
+        assert isinstance(b, pysam.Samfile)
+        b

@@ -35,7 +35,9 @@ def build_fastq_strategy(input_strategy):
         if all((isinstance(x, (str, Path)) for x in input_strategy)):
             input_strategy = FASTQsFromFiles(input_strategy)
         else:
-            input_strategy = FASTQsJoin([build_fastq_strategy(p) for p in input_strategy])
+            input_strategy = FASTQsJoin(
+                [build_fastq_strategy(p) for p in input_strategy]
+            )
     else:
         raise ValueError(f"Could not parse input_strategy: {repr(input_strategy)}")
     return input_strategy
@@ -80,8 +82,8 @@ class _FASTQsBase:
     @property
     def is_paired(self):
         fastqs = self()
-        print('basing pairing on', fastqs)
-        print('was paired', len(fastqs[0]) > 1)
+        print("basing pairing on", fastqs)
+        print("was paired", len(fastqs[0]) > 1)
         return len(fastqs[0]) > 1
 
 
@@ -95,7 +97,7 @@ class FASTQsJoin(_FASTQsBase):
         res = []
         for s in self.strategies:
             res.extend(s())
-        return self.res
+        return res
 
 
 class FASTQsFromFile(_FASTQsBase):
@@ -120,7 +122,7 @@ class FASTQsFromFiles(_FASTQsBase):
     """Use a list of files"""
 
     def __init__(self, filenames_r1_and_r2):
-        self.filenames = filenames_r1_and_r2
+        self.filenames = [Path(x) for x in filenames_r1_and_r2]
         for f in self.filenames:
             if not f.exists():
                 raise IOError(f"file {f} not found")
@@ -197,7 +199,7 @@ class FASTQsFromJob(_FASTQsBase):
 
 
 class FASTQsFromURLs(_FASTQsBase):
-    def __init__(self, urls, job_class):
+    def __init__(self, urls, job_class=ppg.MultiFileGeneratingJob):
         if isinstance(urls, str):
             urls = [urls]
         self.urls = sorted(urls)
@@ -309,10 +311,12 @@ class _FASTQsFromSRA(_FASTQsBase):
                 raise ValueError("fasterq-dump", p.returncode)
             (self.target_dir / "sentinel").write_text("done")
 
-        return selfjob_class([self.target_dir / "sentinel"], dump)
+        return self.job_class([self.target_dir / "sentinel"], dump)
 
 
-def FASTQsFromAccession(accession, job_class=ppg.MultiFileGeneratingJob):  # pragma: no cover - for now
+def FASTQsFromAccession(
+    accession, job_class=ppg.MultiFileGeneratingJob
+):  # pragma: no cover - for now
     if accession.startswith("GSM"):
         return _FASTQs_from_url_callback(accession, _urls_for_gsm, job_class)
     # elif accession.startswith("GSE"):#  multilpe
@@ -387,12 +391,14 @@ def _urls_for_gsm(gsm):
     page = req.text.strip()
     SRX = re.findall(r">\s*(SRX\d+)\s*<", page)
     if not SRX:
-        if '>Reanalysis of<' in page:
-            reanalysis = page[page.find('>Reanalysis of<'):]
-            reanalysis = reanalysis[:reanalysis.find("</a>")]
+        if ">Reanalysis of<" in page:
+            reanalysis = page[page.find(">Reanalysis of<") :]
+            reanalysis = reanalysis[: reanalysis.find("</a>")]
             old_gsm = re.findall(r">\s*(GSM\d+)\s*$", reanalysis)
             if not old_gsm:
-                raise ValueError("Could not find SRX, and parsing for reanalysis failed")
+                raise ValueError(
+                    "Could not find SRX, and parsing for reanalysis failed"
+                )
             return _urls_for_gsm(old_gsm[0])
         else:
             raise ValueError("Could not find SRX number for gsm '%s'" % gsm)
@@ -412,9 +418,9 @@ def _urls_for_gsm(gsm):
         )
         # we could use the http server - but in my experience the ftp server
         # transfers files about 100x faster (20 MB/s vs 200k/s...)
-        if 'ftp_proxy' in os.environ:
-            #but if there is an ftp_proxy, our download code can't make use of it.
-            #and we fall back to http
+        if "ftp_proxy" in os.environ:
+            # but if there is an ftp_proxy, our download code can't make use of it.
+            # and we fall back to http
             ftp_url = "http" + listing_url[4:]
         else:
             ftp_url = "ftp" + listing_url[4:]

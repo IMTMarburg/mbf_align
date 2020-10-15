@@ -13,6 +13,57 @@ from mbf_qualitycontrol import register_qc, QCCollectingJob, qc_disabled
 dp, X = dppd()
 
 
+class _ChromosomeMangledSamFile(pysam.Samfile):
+    """Wraps a samfile so that it understands targets that don't quite
+    have the right name (eg. missing 'chr', additional 'chr' in front
+    of chromosomes, etc.
+    Usage:
+    b = _ChromosomeMangledSamFile(("my.bam",'rb')
+    b.chromosome_mangler = lambda x: 'chr' + x
+
+    the chromosome mangler may return False, which means 'that's a legitimate region, but missing here - just act as if there are no reads on it'
+    """
+
+    def parse_region(
+        self,
+        contig=None,
+        start=None,
+        stop=None,
+        region=None,
+        tid=None,
+        reference=None,
+        end=None,
+    ):
+        if not hasattr(self, "chromosome_mangler"):
+            raise ValueError(
+                "You need to set a .chromosome_mangler on ChromosomeMangledSamFiles. Sorry about that - could not extend c__init__"
+            )
+        if reference:  # old name...
+            contig = reference
+            reference = None
+        if end:
+            stop = end
+            end = None
+        if contig:
+            contig = self.chromosome_mangler(contig)
+            print("new reference", contig)
+            if contig is False:
+                raise ValueError(
+                    "Chromosome mangler for %s returned a region not in the file"
+                    % (self,)
+                )
+        return pysam.Samfile.parseRegion(
+            self,
+            contig=contig,
+            start=start,
+            stop=stop,
+            region=region,
+            tid=tid,
+            reference=None,
+            end=None,
+        )
+
+
 class _BamDerived:
     def _parse_alignment_job_input(self, alignment_job):
         if isinstance(alignment_job, (str, Path)):
@@ -91,11 +142,21 @@ class _BamDerived:
     def get_bam(self):
         import multiprocessing
 
-        return pysam.Samfile(
-            self.bam_filename,
-            index_filename=str(self.index_filename),
-            threads=multiprocessing.cpu_count(),
-        )
+        mapper = getattr(self, "chromosome_mapper", None)
+        if mapper is not None:
+            r = _ChromosomeMangledSamFile(
+                self.bam_filename,
+                index_filename=str(self.index_filename),
+                threads=multiprocessing.cpu_count(),
+            )
+            r.chromosome_mangler = self.chromosome_mapper
+        else:
+            r = pysam.Samfile(
+                self.bam_filename,
+                index_filename=str(self.index_filename),
+                threads=multiprocessing.cpu_count(),
+            )
+        return r
 
     def get_bam_names(self):
         """Retrieve the bam filename and index name as strings"""
@@ -104,16 +165,32 @@ class _BamDerived:
 
 class AlignedSample(_BamDerived):
     def __init__(
-        self, name, alignment_job, genome, is_paired, vid, result_dir=None, aligner=None
+        self,
+        name,
+        alignment_job,
+        genome,
+        is_paired,
+        vid,
+        result_dir=None,
+        aligner=None,
+        chromosome_mapper=None,
     ):
         """
         Create an aligned sample from a BAM producing job.
         See Sample.align()
 
         Parameters:
-            alignment_job FileGeneratingJob, FileInvariant, str, pathlib.Path
-            Where does the BAM come from?
-            str and Path get's converted into a FileInvariant
+            alignment_job: FileGeneratingJob, FileInvariant, str, pathlib.Path
+                Where does the BAM come from?
+                str and Path get's converted into a FileInvariant
+            genome:
+                an mbf_genomes.* Genome
+            is_paired: bool
+                whether this is a paired end sequencing run
+            vid: str
+                a unique, external sample management id
+            chromosome_mapper: Option[function]
+                A function mapping pipeline chromosomes to those used in the BAM
         """
 
         self.name = name
@@ -137,6 +214,7 @@ class AlignedSample(_BamDerived):
         self.index_filename = index_fn
         self.aligner = aligner
         self.register_qc()
+        self.chromosome_mapper = chromosome_mapper
 
     def get_unique_aligned_bam(self):
         """Deprecated compability with older pipeline"""

@@ -19,6 +19,9 @@ from mbf_externals.testing.fixtures import local_store  # noqa:F401
 from mbf_qualitycontrol.testing.fixtures import new_pipegraph_no_qc  # noqa:F401
 
 root = pathlib.Path(__file__).parent.parent
+local_store_path = root / "tests" / "run" / "local_store"
+local_store_path.mkdir(exist_ok=True, parents=True)
+local_store = local_store(local_store_path)
 print("root", root)
 sys.path.append(str(root / "src"))
 print("the path is", sys.path)
