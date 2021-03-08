@@ -190,6 +190,36 @@ class Paired_Filtered_Trimmed(Straight):
                                 )
                                 counter += 1
 
+    def generate_aligner_input(
+        self, output_filename, list_of_fastqs, reverse_reads, read_creator="fastq"
+    ):
+        """This allows to see both mate pairs and select one of them"""
+
+        if read_creator == "fastq":
+            our_iter = iterate_fastq
+        else:
+            raise ValueError("Invalid read creator")  # pragma: no cover
+        counter = 0
+        seen = 0
+        with open(output_filename, "wb") as op:
+            for fn1, fn2 in list_of_fastqs:
+                for tup in zip(
+                    our_iter(fn1, reverse_reads), our_iter(fn2, reverse_reads)
+                ):
+                    seq1, qual1, name1 = tup[0]
+                    seq2, qual2, name2 = tup[1]
+                    seen += 1
+                    filtered = self.filter_func(
+                        seq1, qual1, name1, seq2, qual2, name2
+                    )
+                    if filtered is not None:
+                        s1, q1, n1 = filtered
+                        if s1 is not None:
+                            op.write(
+                                (b"@" + n1 + b"\n" + s1 + b"\n+\n" + q1 + b"\n")
+                            )
+                            counter += 1
+
     def get_dependecies(self, output_filenames):
         return [
             ppg.FunctionInvariant(output_filenames[0] + "_filter", self.filter_func)

@@ -46,22 +46,23 @@ class Sample:
         self.fastq_processor = fastq_processor
         self.vid = vid
         accepted_pairing_values = (
-            'auto',
+            "auto",
             "single",
             "paired",
             "only_first",
             "only_second",
             "paired_as_single",
+            "paired_to_single",
         )
         if not pairing in accepted_pairing_values:
             raise ValueError(
                 f"pairing was not in accepted values: {accepted_pairing_values}"
             )
-        if pairing == 'auto':
+        if pairing == "auto":
             if self.input_strategy.is_paired:
-                pairing = 'paired'
+                pairing = "paired"
             else:
-                pairing = 'single'
+                pairing = "single"
         self.pairing = pairing
         self.is_paired = self.pairing == "paired"
         self.cache_dir = (
@@ -101,15 +102,17 @@ class Sample:
             input_filenames = [str(f[0]) for f in input_pairs]
         elif self.pairing == "only_second":
             input_filenames = [str(f[1]) for f in input_pairs]
-        elif self.pairing == "paired":
+        elif self.pairing == "paired" or self.pairing == "paired_to_single":
             if not any_r2:
-                raise PairingError(f"Paired end lane, but no R2 reads found. Found files: {input_pairs}")
+                raise PairingError(
+                    f"Paired end lane, but no R2 reads found. Found files: {input_pairs}"
+                )
             input_filenames = [
                 (str(f[0]), str(f[1])) for f in input_pairs
             ]  # throwing away all later...
         else:
             raise PairingError("unknown pairing")  # pragma: no cover
-        if self.pairing == "paired":
+        if self.pairing == "paired" or self.pairing == "paired_to_single":
             flat_input_filenames = [f for fl in input_pairs for f in fl]
         else:
             flat_input_filenames = input_filenames
@@ -289,7 +292,7 @@ class Sample:
         a = FASTQC()
         output_dir = self.result_dir / "FASTQC"
         temp_job = self.prepare_input()
-        if hasattr(temp_job, 'filenames'):
+        if hasattr(temp_job, "filenames"):
             filenames = temp_job.filenames
         else:
             filenames = []
