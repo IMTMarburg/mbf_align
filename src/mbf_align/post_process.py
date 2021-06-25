@@ -42,7 +42,7 @@ class SubtractOtherLane(_PostProcessor):
     def __init__(self, other_alignment):
         self.other_alignment = other_alignment
         self.name = "_minus_" + other_alignment.name
-        self.result_folder_name = "subtracted"
+        self.result_folder_name = "subtracted_" + other_alignment.name
 
     def process(self, input_bam_name, output_bam_name, result_dir):
         import mbf_bam
@@ -79,6 +79,8 @@ class SubtractOtherLane(_PostProcessor):
                 f"Subtracted {self.other_alignment.name} from {parent_lane.name}.\nLost {delta} reads of {was} ({delta / was * 100:.2f}%)"
             )
 
+        import pypipegraph2 as ppg2
+        ppg2.util.log_error(f"Creating fg for {new_lane.name} {new_lane.result_dir}")
         delta_job = ppg.FileGeneratingJob(
             new_lane.result_dir / "subtract_delta.txt", write_delta
         ).depends_on(new_lane.load())

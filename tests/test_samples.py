@@ -344,10 +344,10 @@ class TestSamples:
         assert not Path(temp_job.filenames[1]).exists()
         assert Path(real_job.filenames[0]).exists()
         assert Path(real_job.filenames[1]).exists()
-        assert "_R1_" in real_job.filenames[0]
-        assert "_R2_" in real_job.filenames[1]
-        assert ".fastq.gz" in real_job.filenames[0]
-        assert ".fastq.gz" in real_job.filenames[1]
+        assert "_R1_" in str(real_job.filenames[0])
+        assert "_R2_" in str(real_job.filenames[1])
+        assert ".fastq.gz" in str(real_job.filenames[0])
+        assert ".fastq.gz" in str(real_job.filenames[1])
 
         for input_fn, output_fn in zip(
             [
@@ -380,10 +380,10 @@ class TestSamples:
         assert not Path(temp_job.filenames[1]).exists()
         assert Path(real_job.filenames[0]).exists()
         assert Path(real_job.filenames[1]).exists()
-        assert "_R1_" in real_job.filenames[0]
-        assert "_R2_" in real_job.filenames[1]
-        assert ".fastq.gz" in real_job.filenames[0]
-        assert ".fastq.gz" in real_job.filenames[1]
+        assert "_R1_" in str(real_job.filenames[0])
+        assert "_R2_" in str(real_job.filenames[1])
+        assert ".fastq.gz" in str(real_job.filenames[0])
+        assert ".fastq.gz" in str(real_job.filenames[1])
 
         for input_fn, output_fn in zip(
             [
@@ -415,8 +415,8 @@ class TestSamples:
         assert len(temp_job.filenames) == 1
         assert Path(real_job.filenames[0]).exists()
         assert len(real_job.filenames) == 1
-        assert not "_R1_" in real_job.filenames[0]
-        assert ".fastq.gz" in real_job.filenames[0]
+        assert not "_R1_" in str(real_job.filenames[0])
+        assert ".fastq.gz" in str(real_job.filenames[0])
 
         should = b""
         for input_fn in [
@@ -458,8 +458,8 @@ class TestSamples:
         assert len(temp_job.filenames) == 1
         assert Path(real_job.filenames[0]).exists()
         assert len(real_job.filenames) == 1
-        assert not "_R1_" in real_job.filenames[0]
-        assert ".fastq.gz" in real_job.filenames[0]
+        assert not "_R1_" in str(real_job.filenames[0])
+        assert ".fastq.gz" in str(real_job.filenames[0])
 
         should = b""
         for input_fn in [
@@ -488,8 +488,8 @@ class TestSamples:
         assert len(temp_job.filenames) == 1
         assert Path(real_job.filenames[0]).exists()
         assert len(real_job.filenames) == 1
-        assert not "_R1_" in real_job.filenames[0]
-        assert ".fastq.gz" in real_job.filenames[0]
+        assert not "_R1_" in str(real_job.filenames[0])
+        assert ".fastq.gz" in str(real_job.filenames[0])
 
         should = b""
         for input_fn in [
@@ -626,8 +626,8 @@ class TestSamples:
         ppg.run_pipegraph()
         assert Path("fake_index").exists()
         assert Path("fake_index").read_text() == "hello"
-        assert aligned_lane.load()[0].filenames[0].endswith(lane.name + ".bam")
-        assert aligned_lane.load()[0].filenames[1].endswith(lane.name + ".bam.bai")
+        assert str(aligned_lane.load()[0].filenames[0]).endswith(lane.name + ".bam")
+        assert str(aligned_lane.load()[0].filenames[1]).endswith(lane.name + ".bam.bai")
         assert Path(aligned_lane.load()[0].filenames[0]).exists()
         with open(aligned_lane.load()[0].filenames[0]) as op:
             actual = json.load(op)
@@ -714,7 +714,7 @@ class TestSamples:
             assert len(o.target_files) == 2
             assert len(o.dependencies) == 3
             assert Path(o.dependencies[0].filenames[0]).read_text() == "hello_world1"
-            assert "_R1_.fastq.gz" in o.dependencies[0].filenames[0]
+            assert "_R1_.fastq.gz" in str(o.dependencies[0].filenames[0])
             assert Path(o.dependencies[0].filenames[1]).read_text() == url1
             assert Path(o.dependencies[1].filenames[0]).read_text() == "hello_world2"
             assert Path(o.dependencies[1].filenames[1]).read_text() == url2
@@ -797,5 +797,5 @@ class TestSamplesQC:
         )
         qc_jobs = list(get_qc_jobs())
         assert len(qc_jobs) == 1
-        assert "results/lanes/Sample_a/FASTQC/sentinel.txt" in qc_jobs[0].filenames
+        assert "results/lanes/Sample_a/FASTQC/sentinel.txt" in str(qc_jobs[0].filenames)
         assert lane.prepare_input() in qc_jobs[0].prerequisites

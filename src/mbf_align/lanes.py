@@ -68,7 +68,10 @@ class _BamDerived:
     def _parse_alignment_job_input(self, alignment_job):
         if isinstance(alignment_job, (str, Path)):
             alignment_job = ppg.FileInvariant(alignment_job)
-        if not isinstance(alignment_job, (ppg.FileInvariant, ppg.FileGeneratingJob)):
+        if not isinstance(
+            alignment_job,
+            (ppg.FileInvariant, ppg.FileGeneratingJob, ppg.MultiFileGeneratingJob),
+        ):
             raise ValueError(
                 "alignment_job must be a ppg.FileGeneratingJob or FileChecksumInvariant"
                 "was %s" % (type(alignment_job))

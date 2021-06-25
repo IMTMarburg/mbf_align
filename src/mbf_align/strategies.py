@@ -19,7 +19,7 @@ def build_fastq_strategy(input_strategy):
             str/Path - folder: treat as folder
             pypipegraph job: extract filenames
             list - recurvively apply build_fastq_strategy and FASTQsJoin them
-        """
+    """
 
     if isinstance(input_strategy, _FASTQsBase):
         return input_strategy
@@ -429,14 +429,15 @@ def _urls_for_gsm(gsm):
             if filename:
                 result.append(ftp_url + filename)
         if not result:
-            print('failed to find anything on', listing_url)
-            print('trying new style approach')
-            listing_url = 'https://trace.ncbi.nlm.nih.gov/Traces/sra/?run=' + srr
+            print("failed to find anything on", listing_url)
+            print("trying new style approach")
+            listing_url = "https://trace.ncbi.nlm.nih.gov/Traces/sra/?run=" + srr
             req = requests.get(listing_url, timeout=10)
-            for filename in re.findall(r'href="(https://[^"]+\.fastq.gz[^"]*)"', req.text):
+            for filename in re.findall(
+                r'href="(https://[^"]+\.fastq.gz[^"]*)"', req.text
+            ):
                 if filename:
                     result.append(ftp_url + filename)
-
 
     print(result)
     if not result:
