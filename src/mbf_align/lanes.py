@@ -572,6 +572,7 @@ class AlignedSample(_BamDerived):
             umrn = "Uniquely mapped reads number"
             if umrn in order:
                 order = [x for x in order if x != umrn] + [umrn]
+            df.to_pickle(Path(output_filename).with_suffix('.pickle'))
             return (
                 dp(df)
                 .categorize("what", order)
