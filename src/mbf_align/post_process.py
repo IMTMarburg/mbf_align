@@ -85,9 +85,7 @@ class SubtractOtherLane(_PostProcessor):
         return [delta_job]
 
     def register_qc(self, new_lane):
-        """Plot for to see how much you lost.
-
-        """
+        """Plot for to see how much you lost."""
         output_filename = (
             new_lane.result_dir / ".." / "alignment_substract.png"
         ).resolve()
@@ -132,6 +130,9 @@ class SubtractOtherLane(_PostProcessor):
         )  # since everybody says self.load, we get them all
 
 
+_umitools_version = None
+
+
 class UmiTools_Dedup(_PostProcessor):
     def __init__(self, method="directional"):
         self.method = method
@@ -173,9 +174,14 @@ class UmiTools_Dedup(_PostProcessor):
         pass  # pragma: no cover
 
     def get_version(self):
-        return (
-            subprocess.check_output(["umi_tools", "--version"]).decode("utf-8").strip()
-        )
+        global _umitools_version
+        if _umitools_version is None:
+            _umitools_version = (
+                subprocess.check_output(["umi_tools", "--version"])
+                .decode("utf-8")
+                .strip()
+            )
+        return _umitools_version
 
     def get_parameters(self):
         return (self.get_version(),)  # method is being taken care of by name
