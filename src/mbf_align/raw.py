@@ -28,7 +28,7 @@ class Sample:
             fastq_processor: fastq2.*
                 Preprocessing strategy
             pairing: 'auto', 'single', 'paired', 'only_first', 'only_second', 'paired_as_first'
-                default: 'auto'
+                default: 'single'
                 'auto' -> discover pairing from presence of R1/R2 files (-> 'single' or 'paired')
                 'single' -> single end sequencing
                 'paired -> 'paired end' sequencing

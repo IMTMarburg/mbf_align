@@ -64,16 +64,21 @@ class _FASTQsBase:
         if reverse:
             expected_reverse = [Path(str(f).replace("_R1_", "_R2_")) for f in forward]
             if expected_reverse != reverse:
-                raise ValueError(
-                    f"Error pairing forward/reverse files.\nF:{forward}\nR:{reverse}\nE:{expected_reverse}"
-                )
-            results.extend(zip(forward, reverse))
+                expected_reverse = [Path(str(f).replace("_R1", "_R2")) for f in forward]
+                if expected_reverse != reverse:
+                    raise ValueError(
+                        f"Error pairing forward/reverse files.\nF:{forward}\nR:{reverse}\nE:{expected_reverse}"
+                    )
+                results.extend(zip(forward, reverse))
         return results
 
     def _parse_filenames(self, fastqs):
         fastqs = [Path(x).absolute() for x in fastqs]
         forward = sorted([x for x in fastqs if "_R1_" in x.name])
         reverse = sorted([x for x in fastqs if "_R2_" in x.name])
+        if not forward and not reverse:
+            forward = sorted([x for x in fastqs if "_R1" in x.name])
+            reverse = sorted([x for x in fastqs if "_R2" in x.name])
         if not forward and not reverse and fastqs:  # no R1 or R2, but fastqs present
             return sorted(zip(fastqs))
         else:
@@ -312,7 +317,7 @@ class _FASTQsFromSRA(_FASTQsBase):
                 str(self.cache_dir),
                 "-e",
                 "4",
-                '-f',
+                "-f",
             ]
             if self.paired:
                 cmd.append("-S")
@@ -332,9 +337,7 @@ class _FASTQsFromSRA(_FASTQsBase):
 
             (self.target_dir / "sentinel").write_text("done")
 
-        return self.job_class(
-            [self.target_dir / "sentinel"] + output_filenames, dump
-        )
+        return self.job_class([self.target_dir / "sentinel"] + output_filenames, dump)
 
 
 def FASTQsFromAccession(
@@ -398,13 +401,23 @@ def _urls_for_err(accession):
 
 def srx_to_sra(accession):
     import re
+    import json
 
-    srx_url = "https://www.ncbi.nlm.nih.gov/sra/?term=" + accession
-    r = requests.get(srx_url)
-    srrs = set()
-    for srr in re.findall(r"SRR\d+", r.text):
-        srrs.add(srr)
-    return srrs
+    cache_filename = "cache/srx_to_sra.json"
+    try:
+        known = json.loads(open(cache_filename).read())
+    except (OSError, ValueError):
+        known = {}
+    if accession not in known:
+        srx_url = "https://www.ncbi.nlm.nih.gov/sra/?term=" + accession
+        r = requests.get(srx_url)
+        srrs = set()
+        for srr in re.findall(r"SRR\d+", r.text):
+            srrs.add(srr)
+        known[accession] = list(srrs)
+        with open(cache_filename, "w") as op:
+            op.write(json.dumps(known))
+    return known[accession]
 
 
 def _urls_for_emtab(accession):
