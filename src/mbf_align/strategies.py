@@ -64,16 +64,21 @@ class _FASTQsBase:
         if reverse:
             expected_reverse = [Path(str(f).replace("_R1_", "_R2_")) for f in forward]
             if expected_reverse != reverse:
-                raise ValueError(
-                    f"Error pairing forward/reverse files.\nF:{forward}\nR:{reverse}\nE:{expected_reverse}"
-                )
-            results.extend(zip(forward, reverse))
+                expected_reverse = [Path(str(f).replace("_R1", "_R2")) for f in forward]
+                if expected_reverse != reverse:
+                    raise ValueError(
+                        f"Error pairing forward/reverse files.\nF:{forward}\nR:{reverse}\nE:{expected_reverse}"
+                    )
+                results.extend(zip(forward, reverse))
         return results
 
     def _parse_filenames(self, fastqs):
         fastqs = [Path(x).absolute() for x in fastqs]
         forward = sorted([x for x in fastqs if "_R1_" in x.name])
         reverse = sorted([x for x in fastqs if "_R2_" in x.name])
+        if not forward and not reverse:
+            forward = sorted([x for x in fastqs if "_R1" in x.name])
+            reverse = sorted([x for x in fastqs if "_R2" in x.name])
         if not forward and not reverse and fastqs:  # no R1 or R2, but fastqs present
             return sorted(zip(fastqs))
         else:
@@ -199,10 +204,16 @@ class FASTQsFromJob(_FASTQsBase):
 
 
 class FASTQsFromURLs(_FASTQsBase):
-    def __init__(self, urls, job_class=ppg.MultiFileGeneratingJob):
+    def __init__(
+        self,
+        urls,
+        job_class=ppg.MultiFileGeneratingJob,
+        target_dir="incoming/automatic",
+    ):
         if isinstance(urls, str):
             urls = [urls]
         self.urls = sorted(urls)
+        self.target_dir = Path(target_dir)
         self.target_files = self.name_files()
         self.job_class = job_class
         self.jobs = self.download_files()
@@ -218,7 +229,7 @@ class FASTQsFromURLs(_FASTQsBase):
 
     def name_files(self):
         result = []
-        target_dir = Path("incoming") / "automatic"
+        target_dir = self.target_dir
         key = hashlib.md5()
         for u in self.urls:
             key.update(u.encode("utf8"))
@@ -258,18 +269,18 @@ class FASTQsFromURLs(_FASTQsBase):
 
 
 class _FASTQsFromSRA(_FASTQsBase):
-    def __init__(self, accession, job_class):
+    def __init__(self, accession, job_class, target_dir):
         if accession.endswith(":P"):
             self.paired = True
         elif accession.endswith(":S"):
             self.paired = False
         else:
             raise ValueError(
-                "Append :P or :S to accession for paired/single end download"
+                f"Append :P or :S to accession for paired/single end download. Was {accession}."
             )
         self.job_class = job_class
         self.accession = accession[:-2]
-        self.target_dir = Path("incoming") / "automatic" / accession
+        self.target_dir = target_dir / accession
         self.target_dir.mkdir(exist_ok=True, parents=True)
         self.cache_dir = Path("cache/sra_temp")
         self.cache_dir.mkdir(exist_ok=True, parents=True)
@@ -277,17 +288,24 @@ class _FASTQsFromSRA(_FASTQsBase):
         import mbf_externals.sratoolkit
 
         self.algo = mbf_externals.sratoolkit.SRAToolkit()
+        self.algo.unpack()
 
     def __call__(self):
-        # todo: figure out single end lanes
-        return [
-            (
-                str(self.target_dir / self.accession) + "_R1.fastq.gz",
-                str(self.target_dir / self.accession) + "_R2.fastq.gz",
-            )
-        ]
+        if self.paired:
+            return [
+                (
+                    str(self.target_dir / self.accession) + "_R1.fastq.gz",
+                    str(self.target_dir / self.accession) + "_R2.fastq.gz",
+                )
+            ]
+        else:
+            return [(str(self.target_dir / self.accession) + ".fastq.gz",)]
 
     def fastq_dump(self):
+        output_filenames = []
+        for m in self():
+            output_filenames.extend([Path(x) for x in m])
+
         def dump():
             import subprocess
 
@@ -299,6 +317,7 @@ class _FASTQsFromSRA(_FASTQsBase):
                 str(self.cache_dir),
                 "-e",
                 "4",
+                "-f",
             ]
             if self.paired:
                 cmd.append("-S")
@@ -308,31 +327,56 @@ class _FASTQsFromSRA(_FASTQsBase):
             (self.target_dir / "stdout").write_bytes(stdout)
             (self.target_dir / "stderr").write_bytes(stderr)
             if p.returncode != 0 or b"invalid accession" in stderr:
-                raise ValueError("fasterq-dump", p.returncode)
+                raise ValueError("fasterq-dump", p.returncode, cmd, stdout, stderr)
+
+            for f in output_filenames:
+                if f.name.endswith(".fastq.gz"):
+                    funcompressed = f.with_name(f.name[:-3])
+                    if funcompressed.exists():
+                        subprocess.check_call(["gzip", str(funcompressed.absolute())])
+
             (self.target_dir / "sentinel").write_text("done")
 
-        return self.job_class([self.target_dir / "sentinel"], dump)
+        return self.job_class([self.target_dir / "sentinel"] + output_filenames, dump)
 
 
 def FASTQsFromAccession(
-    accession, job_class=ppg.MultiFileGeneratingJob
+    accession, job_class=ppg.MultiFileGeneratingJob, target_dir="incoming/automatic"
 ):  # pragma: no cover - for now
+    target_dir = Path(target_dir)
     if accession.startswith("GSM"):
-        return _FASTQs_from_url_callback(accession, _urls_for_gsm, job_class)
+        return _FASTQs_from_url_callback(
+            accession, _urls_for_gsm, job_class, target_dir
+        )
     # elif accession.startswith("GSE"):#  multilpe
     # raise NotImplementedError()
     elif accession.startswith("SRR"):
-        return _FASTQsFromSRA(accession, job_class)
+        return _FASTQsFromSRA(accession, job_class, target_dir)
+    elif accession.startswith("SRX"):
+        if not (accession.endswith(":P") or accession.endswith(":S")):
+            raise ValueError(
+                f"Append :P or :S to accession for paired/single end download. Was {accession}"
+            )
+        srr = srx_to_sra(accession[:-2])
+        if len(srr) != 1:
+            raise ValueError(f"Found not exactly one SRR for SRX: {accession}: {srr}")
+        return _FASTQsFromSRA(list(srr)[0] + accession[-2:], job_class, target_dir)
     # elif accession.startswith("E-MTAB"): # multiple!
     # raise NotImplementedError()
     elif accession.startswith("PRJNA"):
-        return _FASTQs_from_url_callback(accession, _urls_for_err, job_class)
+        return _FASTQs_from_url_callback(
+            accession, _urls_for_err, job_class, target_dir
+        )
     elif accession.startswith("DRX"):
         raise NotImplementedError()
     elif accession.startswith("ERR"):
-        return _FASTQs_from_url_callback(accession, _urls_for_err, job_class)
+        return _FASTQs_from_url_callback(
+            accession, _urls_for_err, job_class, target_dir
+        )
     elif accession.startswith("E-MTAB") and ":" in accession:
-        return _FASTQs_from_url_callback(accession, _urls_for_emtab, job_class)
+        return _FASTQs_from_url_callback(
+            accession, _urls_for_emtab, job_class, target_dir
+        )
     else:
         raise ValueError("Could not handle this accession %s" % accession)
 
@@ -355,6 +399,27 @@ def _urls_for_err(accession):
     return urls
 
 
+def srx_to_sra(accession):
+    import re
+    import json
+
+    cache_filename = "cache/srx_to_sra.json"
+    try:
+        known = json.loads(open(cache_filename).read())
+    except (OSError, ValueError):
+        known = {}
+    if accession not in known:
+        srx_url = "https://www.ncbi.nlm.nih.gov/sra/?term=" + accession
+        r = requests.get(srx_url)
+        srrs = set()
+        for srr in re.findall(r"SRR\d+", r.text):
+            srrs.add(srr)
+        known[accession] = list(srrs)
+        with open(cache_filename, "w") as op:
+            op.write(json.dumps(known))
+    return known[accession]
+
+
 def _urls_for_emtab(accession):
     mtab, sample = accession.split(":")
     url = f"https://www.ebi.ac.uk/arrayexpress/files/{mtab}/{mtab}.sdrf.txt"
@@ -373,14 +438,14 @@ def _urls_for_emtab(accession):
     return urls
 
 
-def _FASTQs_from_url_callback(accession, url_callback, job_class):
+def _FASTQs_from_url_callback(accession, url_callback, job_class, target_dir):
     cache_folder = Path("cache/url_lookup")
     cache_folder.mkdir(exist_ok=True, parents=True)
     cache_file = cache_folder / (accession + ".urls")
     if not cache_file.exists():  # pragma: no branch
         cache_file.write_text("\n".join(url_callback(accession)))
     urls = list(set(cache_file.read_text().split("\n")))
-    return FASTQsFromURLs(urls, job_class)
+    return FASTQsFromURLs(urls, job_class, target_dir)
 
 
 def _urls_for_gsm(gsm):
