@@ -216,6 +216,8 @@ class AnnotateFastqBarcodes(_PostProcessor):
 
     def process(self, input_bam_name, output_bam_name, result_dir):
         fastq2_filenames = [x[0] for x in self.raw_lane.input_strategy()]
+        if not fastq2_filenames:
+            raise ValueError("No fastq filenames")
         import mbf_bam
 
         mbf_bam.annotate_barcodes_from_fastq(

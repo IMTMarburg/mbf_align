@@ -69,7 +69,7 @@ class _FASTQsBase:
                     raise ValueError(
                         f"Error pairing forward/reverse files.\nF:{forward}\nR:{reverse}\nE:{expected_reverse}"
                     )
-                results.extend(zip(forward, reverse))
+            results.extend(zip(forward, reverse))
         return results
 
     def _parse_filenames(self, fastqs):
