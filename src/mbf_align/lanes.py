@@ -263,10 +263,11 @@ class AlignedSample(_BamDerived):
                 Path(self.get_bam_names()[0]), Path(output_filename), result_dir
             )
 
-        alignment_job = ppg.FileGeneratingJob(bam_filename, inner).depends_on(
+        alignment_job = ppg.FileGeneratingJob(bam_filename, inner)
+        alignment_job.depends_on(
             self.load(),
             post_processor.get_dependencies(),
-            ppg.ParameterInvariant(bam_filename, post_processor.get_parameters()),
+            ppg.ParameterInvariant(alignment_job.job_id, post_processor.get_parameters()),
         )
         vid = post_processor.get_vid(self.vid)
 
